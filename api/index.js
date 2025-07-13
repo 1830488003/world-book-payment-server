@@ -1,82 +1,55 @@
-// 引入必要的库
+// --- 核心依赖 ---
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const cors = require('cors');
+const { Redis } = require('@upstash/redis');
 
-// 创建 Express 应用实例
+// --- 初始化 Express 应用 ---
 const app = express();
 
-// --- 静态文件服务 ---
-// 让 Express 应用自己来托管 public 目录下的静态文件。
-// 这样可以确保无论 Vercel 的路由配置如何，管理页面都能被正确访问。
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// --- 初始化 Upstash Redis 数据库客户端 ---
+// 使用 Vercel 自动注入的环境变量进行连接
+const redis = new Redis({
+    url: process.env.KV_REST_API_URL,
+    token: process.env.KV_REST_API_TOKEN,
+});
 
-
-// --- 安全设置 ---
-// 从环境变量读取管理员密码，如果不存在，则使用您提供的默认密码
-// 部署到Vercel时，强烈建议在Vercel后台设置名为ADMIN_PASSWORD的环境变量
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'qq67564534';
-
-// 使用中间件
-
-// --- CORS 精确配置 ---
-// 定义允许访问的来源白名单
+// --- 中间件配置 ---
+// 1. CORS 精确配置
 const allowedOrigins = [
     'http://127.0.0.1:8000', // 本地SillyTavern开发环境
     'http://localhost:8000',  // 备用本地地址
-    // 在这里添加你部署后的前端Vercel地址，例如: 'https://your-plugin-frontend.vercel.app'
 ];
-
 const corsOptions = {
     origin: (origin, callback) => {
-        // 如果请求来源在白名单内，或者请求没有来源（例如来自服务器自身或Postman等工具），则允许
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true, // 允许前端请求携带凭证（如cookies）
+    credentials: true,
 };
-
 app.use(cors(corsOptions));
-app.use(express.json()); // 解析请求体中的JSON数据
+
+// 2. JSON 解析
+app.use(express.json());
+
+// 3. 静态文件服务 (用于后台管理页面)
+// 注意：此功能在Vercel上不起作用，因为所有请求都指向此文件。
+// 我们依赖Vercel的平台来服务public目录下的文件。
+// 这行代码主要用于本地测试。
+app.use(express.static('public'));
 
 
-// 定义数据库文件路径
-// Vercel部署时，文件系统是只读的，但/tmp/目录是可写的
-const dbPath = process.env.VERCEL ? '/tmp/db.json' : path.join(__dirname, '..', 'db.json');
-
-// 辅助函数：初始化并读取数据库
-const readDB = () => {
-    // 如果Vercel环境下/tmp/db.json不存在，则从项目模板复制一个空的过去
-    if (process.env.VERCEL && !fs.existsSync(dbPath)) {
-        const sourceDbPath = path.join(__dirname, '..', 'db.json');
-        if (fs.existsSync(sourceDbPath)) {
-            fs.copyFileSync(sourceDbPath, dbPath);
-        } else {
-            // 如果源db.json也不存在，就创建一个空的
-            fs.writeFileSync(dbPath, '[]', 'utf8');
-        }
-    }
-    const data = fs.readFileSync(dbPath, 'utf8');
-    return JSON.parse(data);
-};
-
-// 辅助函数：写入数据库
-const writeDB = (data) => {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
-};
-
-// 定义充值档位
+// --- 安全与配置 ---
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'qq67564534';
 const tiers = {
     'tier1': { price: 10, credits: 100 },
     'tier2': { price: 20, credits: 300 },
     'tier3': { price: 30, credits: 500 },
 };
 
-// 辅助函数：生成随机支付口令 (新：6位纯数字)
+// --- 辅助函数 ---
 const generateOrderId = () => {
     let code = '';
     for (let i = 0; i < 6; i++) {
@@ -85,10 +58,10 @@ const generateOrderId = () => {
     return code;
 };
 
-// --- API 路由定义 ---
+// --- API 路由 ---
 
 // 1. 创建支付订单 (给插件调用)
-app.post('/api/create-order', (req, res) => {
+app.post('/api/create-order', async (req, res) => {
     try {
         const { tier } = req.body;
         if (!tier || !tiers[tier]) {
@@ -96,19 +69,18 @@ app.post('/api/create-order', (req, res) => {
         }
 
         const selectedTier = tiers[tier];
-        const db = readDB();
         const orderId = generateOrderId();
         const newOrder = {
             id: orderId,
             tier,
             price: selectedTier.price,
             credits: selectedTier.credits,
-            status: 'pending', // 状态: pending, completed
+            status: 'pending',
             createdAt: new Date().toISOString(),
         };
 
-        db.push(newOrder);
-        writeDB(db);
+        // 将新订单存入 Redis 的一个 Hash 中，键为 'orders'
+        await redis.hset('orders', { [orderId]: JSON.stringify(newOrder) });
 
         res.json({
             orderId: newOrder.id,
@@ -116,38 +88,31 @@ app.post('/api/create-order', (req, res) => {
         });
     } catch (error) {
         console.error('Error in /api/create-order:', error);
-        res.status(500).json({
-            message: '服务器在创建订单时发生内部错误。',
-            error: error.message,
-        });
+        res.status(500).json({ message: '服务器在创建订单时发生内部错误。', error: error.message });
     }
 });
 
 // 2. 查询支付状态 (给插件调用)
-app.get('/api/order-status', (req, res) => {
+app.get('/api/order-status', async (req, res) => {
     try {
         const { orderId } = req.query;
         if (!orderId) {
             return res.status(400).json({ error: 'orderId is required' });
         }
 
-        const db = readDB();
-        const order = db.find(o => o.id === orderId);
+        const orderData = await redis.hget('orders', orderId);
 
-        if (!order) {
+        if (!orderData) {
             return res.status(404).json({ error: 'Order not found' });
         }
 
+        const order = JSON.parse(orderData);
         res.json({ status: order.status, credits: order.credits });
     } catch (error) {
         console.error('Error in /api/order-status:', error);
-        res.status(500).json({
-            message: '服务器在查询订单状态时发生内部错误。',
-            error: error.message,
-        });
+        res.status(500).json({ message: '服务器在查询订单状态时发生内部错误。', error: error.message });
     }
 });
-
 
 // --- 后台管理 API ---
 
@@ -161,66 +126,56 @@ const checkAdminPassword = (req, res, next) => {
 };
 
 // 3. 获取待处理订单 (给后台管理页面调用)
-app.get('/api/pending-orders', checkAdminPassword, (req, res) => {
+app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
     try {
-        const db = readDB();
-        const pendingOrders = db.filter(o => o.status === 'pending').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const allOrders = await redis.hgetall('orders');
+        if (!allOrders) {
+            return res.json([]);
+        }
+
+        const pendingOrders = Object.values(allOrders)
+            .map(orderStr => JSON.parse(orderStr))
+            .filter(order => order.status === 'pending')
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
         res.json(pendingOrders);
     } catch (error) {
         console.error('Error in /api/pending-orders:', error);
-        res.status(500).json({
-            message: '服务器在获取待处理订单时发生内部错误。',
-            error: error.message,
-        });
+        res.status(500).json({ message: '服务器在获取待处理订单时发生内部错误。', error: error.message });
     }
 });
 
 // 4. 确认订单 (给后台管理页面调用)
-app.post('/api/confirm-order', checkAdminPassword, (req, res) => {
+app.post('/api/confirm-order', checkAdminPassword, async (req, res) => {
     try {
         const { orderId } = req.body;
         if (!orderId) {
             return res.status(400).json({ message: 'orderId is required' });
         }
 
-        const db = readDB();
-        const order = db.find(o => o.id === orderId);
+        const orderData = await redis.hget('orders', orderId);
 
-        if (!order) {
+        if (!orderData) {
             return res.status(404).json({ message: 'Order not found' });
         }
+
+        const order = JSON.parse(orderData);
+
         if (order.status === 'completed') {
             return res.status(400).json({ message: 'Order already completed' });
         }
 
         order.status = 'completed';
-        writeDB(db);
+
+        // 更新 Redis 中的订单状态
+        await redis.hset('orders', { [orderId]: JSON.stringify(order) });
 
         res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
-
     } catch (error) {
-        // 增加全局错误捕获，防止任何意外（特别是文件写入失败）导致服务器崩溃
         console.error('Error in /api/confirm-order:', error);
-        res.status(500).json({
-            message: '服务器在确认订单时发生内部错误。',
-            error: error.message,
-        });
+        res.status(500).json({ message: '服务器在确认订单时发生内部错误。', error: error.message });
     }
 });
-
-// 根据Vercel的最佳实践，静态文件现在位于根目录的 /public 文件夹下，
-// Vercel会自动处理它们的服务。
-// Express应用现在只专注于处理 /api/ 路径下的请求。
-
-
-// 启动服务器 (主要用于本地测试)
-if (process.env.NODE_ENV !== 'test') {
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
-        console.log('Admin password is set to:', ADMIN_PASSWORD);
-    });
-}
 
 // 导出app，供Vercel使用
 module.exports = app;
