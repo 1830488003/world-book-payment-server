@@ -186,5 +186,20 @@ app.post('/api/confirm-order', async (req, res) => {
     }
 });
 
+// --- 全局错误处理中间件 (最后的防线) ---
+// 这个中间件必须定义在所有其他 app.use() 和路由之后
+// 它可以捕获来自其他中间件（如 express.json()）的、未被处理的异常
+app.use((err, req, res, next) => {
+    console.error('[GLOBAL ERROR HANDLER] Uncaught Exception:', err);
+    // 确保即使在最坏的情况下也返回JSON，而不是HTML
+    if (res.headersSent) {
+        return next(err);
+    }
+    res.status(500).json({
+        message: '服务器发生了一个意外的、未被捕获的错误。',
+        error: err.message,
+    });
+});
+
 // 导出app，供Vercel使用
 module.exports = app;
