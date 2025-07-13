@@ -1,0 +1,24 @@
+{
+    "name": "world-book-payment-server",
+    "version": "1.0.0",
+    "description": "Payment verification server for world-book-generator",
+    "main": "api/index.js",
+    "scripts": {
+        "start": "node api/index.js"
+    },
+    "dependencies": {
+        "express": "^4.19.2",
+        "cors": "^2.8.5"
+    },
+    "eslintConfig": {
+        "env": {
+            "node": true,
+            "es2021": true
+        },
+        "extends": "eslint:recommended",
+        "parserOptions": {
+            "ecmaVersion": "latest"
+        },
+        "rules": {}
+    }
+}
