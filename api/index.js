@@ -162,16 +162,20 @@ app.post('/api/confirm-order', checkAdminPassword, async (req, res) => {
         }
 
         // Vercel KV 自动反序列化，orderData 已经是对象
-        const order = orderData;
+        const originalOrder = orderData;
 
-        if (order.status === 'completed') {
+        if (originalOrder.status === 'completed') {
             return res.status(400).json({ message: 'Order already completed' });
         }
 
-        order.status = 'completed';
+        // 创建一个全新的订单对象副本，而不是直接修改从数据库返回的对象
+        const updatedOrder = {
+            ...originalOrder,
+            status: 'completed',
+        };
 
-        // 将更新后的订单对象直接写回 Redis，Vercel KV 会自动处理序列化
-        await redis.hset('orders', { [orderId]: order });
+        // 将更新后的、全新的订单对象写回 Redis
+        await redis.hset('orders', { [orderId]: updatedOrder });
 
         res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
     } catch (error) {
