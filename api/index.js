@@ -13,7 +13,28 @@ const app = express();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'qq67564534';
 
 // 使用中间件
-app.use(cors()); // 允许所有来源的跨域请求，方便插件调用
+
+// --- CORS 精确配置 ---
+// 定义允许访问的来源白名单
+const allowedOrigins = [
+    'http://127.0.0.1:8000', // 本地SillyTavern开发环境
+    'http://localhost:8000',  // 备用本地地址
+    // 在这里添加你部署后的前端Vercel地址，例如: 'https://your-plugin-frontend.vercel.app'
+];
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        // 如果请求来源在白名单内，或者请求没有来源（例如来自服务器自身或Postman等工具），则允许
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true, // 允许前端请求携带凭证（如cookies）
+};
+
+app.use(cors(corsOptions));
 app.use(express.json()); // 解析请求体中的JSON数据
 
 
