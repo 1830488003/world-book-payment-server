@@ -60,7 +60,7 @@ const generateOrderId = () => {
 // --- API 路由 ---
 
 // 1. 创建支付订单 (给插件调用)
-app.post('/api/create-order', async (req, res) => {
+app.post('/create-order', async (req, res) => {
     try {
         const { tier } = req.body;
         if (!tier || !tiers[tier]) {
@@ -92,7 +92,7 @@ app.post('/api/create-order', async (req, res) => {
 });
 
 // 2. 查询支付状态 (给插件调用)
-app.get('/api/order-status', async (req, res) => {
+app.get('/order-status', async (req, res) => {
     try {
         const { orderId } = req.query;
         if (!orderId) {
@@ -125,7 +125,7 @@ const checkAdminPassword = (req, res, next) => {
 };
 
 // 3. 获取待处理订单 (给后台管理页面调用)
-app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
+app.get('/pending-orders', checkAdminPassword, async (req, res) => {
     try {
         const allOrders = await redis.hgetall('orders');
         if (!allOrders) {
@@ -145,7 +145,7 @@ app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
 });
 
 // 4. 确认订单 (给后台管理页面调用)
-app.post('/api/confirm-order', checkAdminPassword, async (req, res) => {
+app.post('/confirm-order', checkAdminPassword, async (req, res) => {
     try {
         const { orderId } = req.body;
         if (!orderId) {
