@@ -2,7 +2,6 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const cors = require('cors');
 
 // 创建 Express 应用实例
 const app = express();
@@ -13,7 +12,6 @@ const app = express();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'qq67564534';
 
 // 使用中间件
-app.use(cors()); // 允许所有来源的跨域请求，方便插件调用
 app.use(express.json()); // 解析请求体中的JSON数据
 
 
