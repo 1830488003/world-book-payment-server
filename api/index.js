@@ -61,9 +61,7 @@ const generateOrderId = () => {
 // --- API 路由定义 ---
 
 // 1. 创建支付订单 (给插件调用)
-// Vercel 会将 /api/create-order 的请求路由到此文件，Express 仅需处理剩余的 /create-order 部分
-app.options('/create-order', cors()); // 显式启用对POST路由的预检请求
-app.post('/create-order', (req, res) => {
+app.post('/api/create-order', (req, res) => {
     const { tier } = req.body;
     if (!tier || !tiers[tier]) {
         return res.status(400).json({ error: 'Invalid tier selected' });
@@ -91,7 +89,7 @@ app.post('/create-order', (req, res) => {
 });
 
 // 2. 查询支付状态 (给插件调用)
-app.get('/order-status', (req, res) => {
+app.get('/api/order-status', (req, res) => {
     const { orderId } = req.query;
     if (!orderId) {
         return res.status(400).json({ error: 'orderId is required' });
@@ -120,14 +118,14 @@ const checkAdminPassword = (req, res, next) => {
 };
 
 // 3. 获取待处理订单 (给后台管理页面调用)
-app.get('/pending-orders', checkAdminPassword, (req, res) => {
+app.get('/api/pending-orders', checkAdminPassword, (req, res) => {
     const db = readDB();
     const pendingOrders = db.filter(o => o.status === 'pending').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(pendingOrders);
 });
 
 // 4. 确认订单 (给后台管理页面调用)
-app.post('/confirm-order', checkAdminPassword, (req, res) => {
+app.post('/api/confirm-order', checkAdminPassword, (req, res) => {
     const { orderId } = req.body;
     if (!orderId) {
         return res.status(400).json({ message: 'orderId is required' });
@@ -148,6 +146,11 @@ app.post('/confirm-order', checkAdminPassword, (req, res) => {
 
     res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
 });
+
+// 根据Vercel的最佳实践，静态文件现在位于根目录的 /public 文件夹下，
+// Vercel会自动处理它们的服务。
+// Express应用现在只专注于处理 /api/ 路径下的请求。
+
 
 // 启动服务器 (主要用于本地测试)
 if (process.env.NODE_ENV !== 'test') {
