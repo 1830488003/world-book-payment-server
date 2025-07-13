@@ -144,7 +144,14 @@
                     return;
                 }
                 if (!response.ok) {
-                    throw new Error('获取订单失败');
+                    let errorMsg = `获取订单失败: ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMsg = errorData.message || JSON.stringify(errorData);
+                    } catch (e) {
+                        console.error('获取订单时，服务器响应不是JSON格式。');
+                    }
+                    throw new Error(errorMsg);
                 }
                 const orders = await response.json();
                 renderOrders(orders);
@@ -197,8 +204,15 @@
                     }
 
                     if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || '确认失败');
+                        let errorMsg = `确认失败: ${response.status}`;
+                        try {
+                            const errorData = await response.json();
+                            errorMsg = errorData.message || JSON.stringify(errorData);
+                        } catch (e) {
+                            console.error('确认订单时，服务器响应不是JSON格式。');
+                            errorMsg = '服务器返回了非预期的格式(很可能是HTML错误页面)，请检查Vercel后台的函数日志。';
+                        }
+                        throw new Error(errorMsg);
                     }
                     
                     alert(`订单 ${orderId} 确认成功！`);
