@@ -31,6 +31,13 @@ const writeDB = (data) => {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
 };
 
+// 定义充值档位
+const tiers = {
+    'tier1': { price: 10, credits: 100 },
+    'tier2': { price: 20, credits: 300 },
+    'tier3': { price: 30, credits: 500 },
+};
+
 // 辅助函数：生成随机支付口令
 const generatePaymentCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -45,16 +52,24 @@ const generatePaymentCode = () => {
 
 // 1. 创建支付请求 (给插件调用)
 app.post('/api/create-payment', (req, res) => {
-    const { requestId } = req.body;
-    if (!requestId) {
-        return res.status(400).json({ error: 'requestId is required' });
+    const { requestId, tier } = req.body;
+    if (!requestId || !tier) {
+        return res.status(400).json({ error: 'requestId and tier are required' });
     }
 
+    if (!tiers[tier]) {
+        return res.status(400).json({ error: 'Invalid tier selected' });
+    }
+
+    const selectedTier = tiers[tier];
     const db = readDB();
     const paymentCode = generatePaymentCode();
     const newOrder = {
         requestId,
         paymentCode,
+        tier, // tier1, tier2, tier3
+        price: selectedTier.price,
+        credits: selectedTier.credits,
         status: 'pending', // 状态: pending, paid
         createdAt: new Date().toISOString(),
     };
@@ -62,11 +77,10 @@ app.post('/api/create-payment', (req, res) => {
     db.push(newOrder);
     writeDB(db);
 
-    // 返回支付口令和你的收款二维码信息（请替换成你自己的）
+    // 返回支付口令和价格，二维码由前端处理
     res.json({
         paymentCode,
-        qrCodeUrl: 'https://p.pstatp.com/weiman/ms-3528351681835011~tplv-obj.image', // 这里应该放你的收款二维码图片URL
-        price: 18.1, // 你的定价
+        price: selectedTier.price,
     });
 });
 
@@ -84,7 +98,13 @@ app.get('/api/payment-status', (req, res) => {
         return res.status(404).json({ error: 'Order not found' });
     }
 
-    res.json({ status: order.status });
+    const responsePayload = { status: order.status };
+    // 如果已支付，则返回购买的次数
+    if (order.status === 'paid') {
+        responsePayload.credits = order.credits;
+    }
+
+    res.json(responsePayload);
 });
 
 // 3. 确认支付 (给你自己后台管理页面调用)
@@ -153,6 +173,10 @@ app.get('/admin', (req, res) => {
                         <div class="order">
                             <div>
                                 <div class="order-code">${order.paymentCode}</div>
+                                <div class="order-info">
+                                    <span>金额: <strong>${order.price}元</strong></span> | 
+                                    <span>次数: <strong>${order.credits}次</strong></span>
+                                </div>
                                 <div class="order-time">创建于: ${new Date(order.createdAt).toLocaleString('zh-CN')}</div>
                             </div>
                             <button class="confirm-btn" onclick="confirmPayment('${order.paymentCode}')">确认收款</button>
