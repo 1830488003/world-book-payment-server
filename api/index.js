@@ -134,8 +134,17 @@ app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
         }
 
         const pendingOrders = Object.values(allOrders)
-            .map(orderStr => JSON.parse(orderStr))
-            .filter(order => order.status === 'pending')
+            .map(orderStr => {
+                try {
+                    // 尝试解析每一条订单数据
+                    return JSON.parse(orderStr);
+                } catch (e) {
+                    // 如果解析失败，说明该条数据已损坏
+                    console.error('发现并跳过一条已损坏的订单数据:', orderStr, e);
+                    return null; // 返回null，以便后续过滤掉
+                }
+            })
+            .filter(order => order && order.status === 'pending') // 过滤掉所有损坏的(null)和非待处理的订单
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.json(pendingOrders);
