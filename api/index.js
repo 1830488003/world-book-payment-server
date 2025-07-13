@@ -15,8 +15,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'qq67564534';
 // 使用中间件
 app.use(cors()); // 允许所有来源的跨域请求，方便插件调用
 app.use(express.json()); // 解析请求体中的JSON数据
-// 托管项目根目录下的静态文件，主要是为了admin.html
-app.use(express.static(path.join(__dirname, '..')));
 
 
 // 定义数据库文件路径
@@ -150,7 +148,16 @@ app.post('/api/confirm-order', checkAdminPassword, (req, res) => {
     res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
 });
 
-// 根路由，可以重定向到admin.html或显示一个欢迎信息
+// --- 静态文件服务 ---
+// 明确地为后台管理页面创建一个路由
+app.get('/admin.html', (req, res) => {
+    // 构建到 admin.html 文件的绝对路径
+    const adminHtmlPath = path.join(__dirname, '..', 'admin.html');
+    // 发送文件
+    res.sendFile(adminHtmlPath);
+});
+
+// 根路由，显示一个欢迎信息
 app.get('/', (req, res) => {
     res.send('<h1>世界书生成器支付服务器</h1><p>后台管理页面请访问 <a href="/admin.html">/admin.html</a></p>');
 });
