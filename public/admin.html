@@ -212,12 +212,16 @@
 
                     if (!response.ok) {
                         let errorMsg = `确认失败: ${response.status}`;
+                        // --- 增加详细日志 ---
+                        const rawErrorText = await response.text();
+                        console.error('[DEBUG] 从 /api/confirm-order 收到的原始错误响应:', rawErrorText);
+                        // --- 日志结束 ---
                         try {
-                            const errorData = await response.json();
+                            const errorData = JSON.parse(rawErrorText);
                             errorMsg = errorData.message || JSON.stringify(errorData);
                         } catch (e) {
                             console.error('确认订单时，服务器响应不是JSON格式。');
-                            errorMsg = '服务器返回了非预期的格式(很可能是HTML错误页面)，请检查Vercel后台的函数日志。';
+                            errorMsg = '服务器返回了非预期的格式(很可能是HTML错误页面)，请检查Vercel后台的函数日志。原始响应已打印到控制台。';
                         }
                         throw new Error(errorMsg);
                     }
