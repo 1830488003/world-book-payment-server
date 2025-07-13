@@ -35,10 +35,9 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 // 3. 静态文件服务 (用于后台管理页面)
-// 注意：此功能在Vercel上不起作用，因为所有请求都指向此文件。
-// 我们依赖Vercel的平台来服务public目录下的文件。
-// 这行代码主要用于本地测试。
-app.use(express.static('public'));
+// Vercel 会自动处理 public 目录下的静态文件，无需在此处添加。
+// 这行代码仅在本地测试时需要，在生产环境中可以注释掉。
+// app.use(express.static('public'));
 
 
 // --- 安全与配置 ---
