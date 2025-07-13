@@ -153,25 +153,35 @@ app.get('/api/pending-orders', checkAdminPassword, (req, res) => {
 
 // 4. 确认订单 (给后台管理页面调用)
 app.post('/api/confirm-order', checkAdminPassword, (req, res) => {
-    const { orderId } = req.body;
-    if (!orderId) {
-        return res.status(400).json({ message: 'orderId is required' });
+    try {
+        const { orderId } = req.body;
+        if (!orderId) {
+            return res.status(400).json({ message: 'orderId is required' });
+        }
+
+        const db = readDB();
+        const order = db.find(o => o.id === orderId);
+
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+        if (order.status === 'completed') {
+            return res.status(400).json({ message: 'Order already completed' });
+        }
+
+        order.status = 'completed';
+        writeDB(db);
+
+        res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
+
+    } catch (error) {
+        // 增加全局错误捕获，防止任何意外（特别是文件写入失败）导致服务器崩溃
+        console.error('Error in /api/confirm-order:', error);
+        res.status(500).json({
+            message: '服务器在确认订单时发生内部错误。',
+            error: error.message,
+        });
     }
-
-    const db = readDB();
-    const order = db.find(o => o.id === orderId);
-
-    if (!order) {
-        return res.status(404).json({ message: 'Order not found' });
-    }
-    if (order.status === 'completed') {
-        return res.status(400).json({ message: 'Order already completed' });
-    }
-
-    order.status = 'completed';
-    writeDB(db);
-
-    res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
 });
 
 // 根据Vercel的最佳实践，静态文件现在位于根目录的 /public 文件夹下，
