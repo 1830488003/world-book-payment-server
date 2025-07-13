@@ -19,6 +19,7 @@ const redis = new Redis({
 const allowedOrigins = [
     'http://127.0.0.1:8000', // 本地SillyTavern开发环境
     'http://localhost:8000',  // 备用本地地址
+    'https://world-book-payment-server.vercel.app', // 生产环境域名 (为admin.html页面本身)
 ];
 const corsOptions = {
     origin: (origin, callback) => {
