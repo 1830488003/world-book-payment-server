@@ -7,6 +7,12 @@ const cors = require('cors');
 // 创建 Express 应用实例
 const app = express();
 
+// --- 静态文件服务 ---
+// 让 Express 应用自己来托管 public 目录下的静态文件。
+// 这样可以确保无论 Vercel 的路由配置如何，管理页面都能被正确访问。
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+
 // --- 安全设置 ---
 // 从环境变量读取管理员密码，如果不存在，则使用您提供的默认密码
 // 部署到Vercel时，强烈建议在Vercel后台设置名为ADMIN_PASSWORD的环境变量
