@@ -80,8 +80,8 @@ app.post('/api/create-order', async (req, res) => {
             createdAt: new Date().toISOString(),
         };
 
-        // 将新订单存入 Redis 的一个 Hash 中，键为 'orders'
-        await redis.hset('orders', { [orderId]: JSON.stringify(newOrder) });
+        // 将新订单对象直接存入 Redis 的 Hash 中，Vercel KV 会自动处理序列化
+        await redis.hset('orders', { [orderId]: newOrder });
 
         res.json({
             orderId: newOrder.id,
@@ -107,7 +107,8 @@ app.get('/api/order-status', async (req, res) => {
             return res.status(404).json({ error: 'Order not found' });
         }
 
-        const order = JSON.parse(orderData);
+        // Vercel KV 自动反序列化，orderData 已经是对象
+        const order = orderData;
         res.json({ status: order.status, credits: order.credits });
     } catch (error) {
         console.error('Error in /api/order-status:', error);
@@ -134,18 +135,9 @@ app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
             return res.json([]);
         }
 
+        // Vercel KV 返回的 hgetall 的值已经是反序列化后的对象，无需手动解析
         const pendingOrders = Object.values(allOrders)
-            .map(orderStr => {
-                try {
-                    // 尝试解析每一条订单数据
-                    return JSON.parse(orderStr);
-                } catch (e) {
-                    // 如果解析失败，说明该条数据已损坏
-                    console.error('发现并跳过一条已损坏的订单数据:', orderStr, e);
-                    return null; // 返回null，以便后续过滤掉
-                }
-            })
-            .filter(order => order && order.status === 'pending') // 过滤掉所有损坏的(null)和非待处理的订单
+            .filter(order => order && typeof order === 'object' && order.status === 'pending') // 过滤掉所有非对象和非待处理的订单
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.json(pendingOrders);
@@ -169,7 +161,8 @@ app.post('/api/confirm-order', checkAdminPassword, async (req, res) => {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        const order = JSON.parse(orderData);
+        // Vercel KV 自动反序列化，orderData 已经是对象
+        const order = orderData;
 
         if (order.status === 'completed') {
             return res.status(400).json({ message: 'Order already completed' });
@@ -177,8 +170,8 @@ app.post('/api/confirm-order', checkAdminPassword, async (req, res) => {
 
         order.status = 'completed';
 
-        // 更新 Redis 中的订单状态
-        await redis.hset('orders', { [orderId]: JSON.stringify(order) });
+        // 将更新后的订单对象直接写回 Redis，Vercel KV 会自动处理序列化
+        await redis.hset('orders', { [orderId]: order });
 
         res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
     } catch (error) {
