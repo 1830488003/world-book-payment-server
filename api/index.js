@@ -31,10 +31,6 @@ const corsOptions = {
     credentials: true,
 };
 
-// 启用预检请求的CORS处理
-// 这对于需要 'Content-Type': 'application/json' 的跨域POST请求至关重要
-app.options('*', cors(corsOptions));
-
 app.use(cors(corsOptions));
 
 // 2. JSON 解析
