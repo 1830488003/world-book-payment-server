@@ -147,9 +147,20 @@ app.post('/api/confirm-order', checkAdminPassword, (req, res) => {
     res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
 });
 
-// Vercel 将会自动处理根目录下的静态文件 (如 admin.html)。
-// 因此，我们不再需要在 Express 中为它们创建路由。
-// Express 应用现在只专注于处理 /api/ 路径下的请求。
+// --- 静态文件服务 ---
+// 明确地为后台管理页面创建一个路由
+app.get('/admin.html', (req, res) => {
+    // 构建到 admin.html 文件的绝对路径
+    // 注意：这里的路径是相对于 api 目录的
+    const adminHtmlPath = path.join(__dirname, '..', 'admin.html');
+    // 发送文件
+    res.sendFile(adminHtmlPath);
+});
+
+// 根路由，可以重定向到admin.html或显示一个欢迎信息
+app.get('/', (req, res) => {
+    res.send('<h1>世界书生成器支付服务器</h1><p>后台管理页面请访问 <a href="/admin.html">/admin.html</a></p>');
+});
 
 
 // 启动服务器 (主要用于本地测试)
