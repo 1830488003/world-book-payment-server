@@ -2,6 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Redis } = require('@upstash/redis');
+const path = require('path');
 
 // --- 初始化 Express 应用 ---
 const app = express();
@@ -36,7 +37,8 @@ app.use(express.json());
 
 // 3. 静态文件服务 (用于后台管理页面)
 // 在单一入口架构下，此行代码至关重要，必须启用。
-app.use(express.static('public'));
+// 使用 path.join 和 __dirname 构建一个绝对可靠的路径，确保能找到 public 目录。
+app.use(express.static(path.join(__dirname, '../public')));
 
 
 // --- 安全与配置 ---
