@@ -118,18 +118,15 @@ app.get('/api/order-status', async (req, res) => {
 
 // --- 后台管理 API ---
 
-// 中间件：验证管理员密码
-const checkAdminPassword = (req, res, next) => {
-    const password = req.query.password || (req.body && req.body.password);
-    if (password !== ADMIN_PASSWORD) {
-        return res.status(401).json({ message: 'Unauthorized: Invalid password' });
-    }
-    next();
-};
-
 // 3. 获取待处理订单 (给后台管理页面调用)
-app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
+app.get('/api/pending-orders', async (req, res) => {
     try {
+        // 权限验证逻辑移入 try...catch 块
+        const { password } = req.query;
+        if (password !== ADMIN_PASSWORD) {
+            return res.status(401).json({ message: 'Unauthorized: Invalid password' });
+        }
+
         const allOrders = await redis.hgetall('orders');
         if (!allOrders) {
             return res.json([]);
@@ -148,9 +145,14 @@ app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
 });
 
 // 4. 确认订单 (给后台管理页面调用)
-app.post('/api/confirm-order', checkAdminPassword, async (req, res) => {
+app.post('/api/confirm-order', async (req, res) => {
     try {
-        const { orderId } = req.body;
+        // 权限验证逻辑移入 try...catch 块
+        const { orderId, password } = req.body;
+        if (password !== ADMIN_PASSWORD) {
+            return res.status(401).json({ message: 'Unauthorized: Invalid password' });
+        }
+
         if (!orderId) {
             return res.status(400).json({ message: 'orderId is required' });
         }
