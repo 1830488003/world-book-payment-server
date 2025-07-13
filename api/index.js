@@ -89,47 +89,63 @@ const generateOrderId = () => {
 
 // 1. 创建支付订单 (给插件调用)
 app.post('/api/create-order', (req, res) => {
-    const { tier } = req.body;
-    if (!tier || !tiers[tier]) {
-        return res.status(400).json({ error: 'Invalid tier selected' });
+    try {
+        const { tier } = req.body;
+        if (!tier || !tiers[tier]) {
+            return res.status(400).json({ error: 'Invalid tier selected' });
+        }
+
+        const selectedTier = tiers[tier];
+        const db = readDB();
+        const orderId = generateOrderId();
+        const newOrder = {
+            id: orderId,
+            tier,
+            price: selectedTier.price,
+            credits: selectedTier.credits,
+            status: 'pending', // 状态: pending, completed
+            createdAt: new Date().toISOString(),
+        };
+
+        db.push(newOrder);
+        writeDB(db);
+
+        res.json({
+            orderId: newOrder.id,
+            price: newOrder.price,
+        });
+    } catch (error) {
+        console.error('Error in /api/create-order:', error);
+        res.status(500).json({
+            message: '服务器在创建订单时发生内部错误。',
+            error: error.message,
+        });
     }
-
-    const selectedTier = tiers[tier];
-    const db = readDB();
-    const orderId = generateOrderId();
-    const newOrder = {
-        id: orderId,
-        tier,
-        price: selectedTier.price,
-        credits: selectedTier.credits,
-        status: 'pending', // 状态: pending, completed
-        createdAt: new Date().toISOString(),
-    };
-
-    db.push(newOrder);
-    writeDB(db);
-
-    res.json({
-        orderId: newOrder.id,
-        price: newOrder.price,
-    });
 });
 
 // 2. 查询支付状态 (给插件调用)
 app.get('/api/order-status', (req, res) => {
-    const { orderId } = req.query;
-    if (!orderId) {
-        return res.status(400).json({ error: 'orderId is required' });
+    try {
+        const { orderId } = req.query;
+        if (!orderId) {
+            return res.status(400).json({ error: 'orderId is required' });
+        }
+
+        const db = readDB();
+        const order = db.find(o => o.id === orderId);
+
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        res.json({ status: order.status, credits: order.credits });
+    } catch (error) {
+        console.error('Error in /api/order-status:', error);
+        res.status(500).json({
+            message: '服务器在查询订单状态时发生内部错误。',
+            error: error.message,
+        });
     }
-
-    const db = readDB();
-    const order = db.find(o => o.id === orderId);
-
-    if (!order) {
-        return res.status(404).json({ error: 'Order not found' });
-    }
-
-    res.json({ status: order.status, credits: order.credits });
 });
 
 
@@ -146,9 +162,17 @@ const checkAdminPassword = (req, res, next) => {
 
 // 3. 获取待处理订单 (给后台管理页面调用)
 app.get('/api/pending-orders', checkAdminPassword, (req, res) => {
-    const db = readDB();
-    const pendingOrders = db.filter(o => o.status === 'pending').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json(pendingOrders);
+    try {
+        const db = readDB();
+        const pendingOrders = db.filter(o => o.status === 'pending').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        res.json(pendingOrders);
+    } catch (error) {
+        console.error('Error in /api/pending-orders:', error);
+        res.status(500).json({
+            message: '服务器在获取待处理订单时发生内部错误。',
+            error: error.message,
+        });
+    }
 });
 
 // 4. 确认订单 (给后台管理页面调用)
