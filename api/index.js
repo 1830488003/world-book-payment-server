@@ -35,9 +35,8 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 // 3. 静态文件服务 (用于后台管理页面)
-// Vercel 会自动处理 public 目录下的静态文件，无需在此处添加。
-// 这行代码仅在本地测试时需要，在生产环境中可以注释掉。
-// app.use(express.static('public'));
+// 在单一入口架构下，此行代码至关重要，必须启用。
+app.use(express.static('public'));
 
 
 // --- 安全与配置 ---
@@ -60,7 +59,7 @@ const generateOrderId = () => {
 // --- API 路由 ---
 
 // 1. 创建支付订单 (给插件调用)
-app.post('/create-order', async (req, res) => {
+app.post('/api/create-order', async (req, res) => {
     try {
         const { tier } = req.body;
         if (!tier || !tiers[tier]) {
@@ -92,7 +91,7 @@ app.post('/create-order', async (req, res) => {
 });
 
 // 2. 查询支付状态 (给插件调用)
-app.get('/order-status', async (req, res) => {
+app.get('/api/order-status', async (req, res) => {
     try {
         const { orderId } = req.query;
         if (!orderId) {
@@ -125,7 +124,7 @@ const checkAdminPassword = (req, res, next) => {
 };
 
 // 3. 获取待处理订单 (给后台管理页面调用)
-app.get('/pending-orders', checkAdminPassword, async (req, res) => {
+app.get('/api/pending-orders', checkAdminPassword, async (req, res) => {
     try {
         const allOrders = await redis.hgetall('orders');
         if (!allOrders) {
@@ -145,7 +144,7 @@ app.get('/pending-orders', checkAdminPassword, async (req, res) => {
 });
 
 // 4. 确认订单 (给后台管理页面调用)
-app.post('/confirm-order', checkAdminPassword, async (req, res) => {
+app.post('/api/confirm-order', checkAdminPassword, async (req, res) => {
     try {
         const { orderId } = req.body;
         if (!orderId) {
