@@ -7,9 +7,10 @@
         "start": "node api/index.js"
     },
     "dependencies": {
-        "express": "^4.19.2",
+        "@upstash/redis": "^1.31.6",
         "cors": "^2.8.5",
-        "@upstash/redis": "^1.31.6"
+        "express": "^4.19.2",
+        "jsonwebtoken": "^9.0.2"
     },
     "eslintConfig": {
         "env": {

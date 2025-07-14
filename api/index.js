@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { Redis } = require('@upstash/redis');
 const path = require('path');
+const jwt = require('jsonwebtoken'); // 引入jsonwebtoken
 
 // --- 初始化 Express 应用 ---
 const app = express();
@@ -45,6 +46,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // --- 安全与配置 ---
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'qq67564534';
+const JWT_SECRET = process.env.JWT_SECRET || 'a-very-strong-and-secret-key-for-jwt'; // 强烈建议在Vercel环境变量中设置一个更复杂的密钥
 const tiers = {
     'tier1': { price: 10, credits: 100 },
     'tier2': { price: 20, credits: 300 },
@@ -62,12 +64,49 @@ const generateOrderId = () => {
 
 // --- API 路由 ---
 
-// 1. 创建支付订单 (给插件调用)
-app.post('/api/create-order', async (req, res) => {
+// 新增 API: 1. 生成临时的、带签名的支付口令 (JWT)
+app.post('/api/generate-payment-code', (req, res) => {
     try {
         const { tier } = req.body;
         if (!tier || !tiers[tier]) {
-            return res.status(400).json({ error: 'Invalid tier selected' });
+            return res.status(400).json({ error: '无效的充值档位' });
+        }
+
+        // 使用 tier 和一个随机数创建 payload，增加唯一性
+        const payload = {
+            tier: tier,
+            nonce: Math.random().toString(36).substring(7) 
+        };
+
+        // 生成 JWT，有效期为1小时
+        const paymentCode = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+        
+        res.json({
+            paymentCode: paymentCode,
+            price: tiers[tier].price
+        });
+
+    } catch (error) {
+        console.error('Error in /api/generate-payment-code:', error);
+        res.status(500).json({ message: '服务器在生成支付口令时发生内部错误。', error: error.message });
+    }
+});
+
+
+// 修改后的 API: 2. 使用支付口令创建真实订单
+app.post('/api/create-order', async (req, res) => {
+    try {
+        const { paymentCode } = req.body;
+        if (!paymentCode) {
+            return res.status(400).json({ error: '缺少支付口令 (paymentCode)' });
+        }
+
+        // 验证并解码 JWT
+        const decoded = jwt.verify(paymentCode, JWT_SECRET);
+        const { tier } = decoded;
+
+        if (!tier || !tiers[tier]) {
+            return res.status(400).json({ error: '支付口令无效或已过期' });
         }
 
         const selectedTier = tiers[tier];
@@ -79,22 +118,30 @@ app.post('/api/create-order', async (req, res) => {
             credits: selectedTier.credits,
             status: 'pending',
             createdAt: new Date().toISOString(),
+            paymentCode: paymentCode, // (可选) 记录用于创建订单的口令
         };
 
-        // 将新订单对象直接存入 Redis 的 Hash 中，Vercel KV 会自动处理序列化
         await redis.hset('orders', { [orderId]: newOrder });
 
+        // 返回真实的 orderId，用于前端轮询
         res.json({
             orderId: newOrder.id,
-            price: newOrder.price,
         });
+
     } catch (error) {
+        if (error instanceof jwt.JsonWebTokenError) {
+            return res.status(401).json({ message: '支付口令无效或被篡改。', error: error.message });
+        }
+        if (error instanceof jwt.TokenExpiredError) {
+            return res.status(401).json({ message: '支付口令已过期，请重新生成。', error: error.message });
+        }
         console.error('Error in /api/create-order:', error);
         res.status(500).json({ message: '服务器在创建订单时发生内部错误。', error: error.message });
     }
 });
 
-// 2. 查询支付状态 (给插件调用)
+
+// 3. 查询支付状态 (给插件调用)
 app.get('/api/order-status', async (req, res) => {
     try {
         const { orderId } = req.query;
@@ -119,7 +166,7 @@ app.get('/api/order-status', async (req, res) => {
 
 // --- 后台管理 API ---
 
-// 3. 获取待处理订单 (给后台管理页面调用)
+// 4. 获取待处理订单 (给后台管理页面调用)
 app.get('/api/pending-orders', async (req, res) => {
     try {
         // 权限验证逻辑移入 try...catch 块
@@ -145,7 +192,7 @@ app.get('/api/pending-orders', async (req, res) => {
     }
 });
 
-// 4. 确认订单 (给后台管理页面调用)
+// 5. 确认订单 (给后台管理页面调用)
 app.post('/api/confirm-order', async (req, res) => {
     try {
         // 权限验证逻辑移入 try...catch 块
