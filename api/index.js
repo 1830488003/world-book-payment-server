@@ -147,7 +147,7 @@ app.get('/api/pending-orders', async (req, res) => {
         }
 
         const pendingOrders = Object.values(allOrders)
-            .filter(order => order && typeof order === 'object' && (order.status === 'pending' || order.status === 'user_confirmed'))
+            .filter(order => order && typeof order === 'object' && order.status === 'user_confirmed')
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.json(pendingOrders);
