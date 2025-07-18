@@ -36,9 +36,9 @@ app.use(express.static(path.join(__dirname, '../public')));
 // --- 安全与配置 ---
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'qq67564534';
 const tiers = {
-    'tier1': { price: 10, credits: 100 },
-    'tier2': { price: 20, credits: 300 },
-    'tier3': { price: 30, credits: 500 },
+    tier1: { price: 10, credits: 100 },
+    tier2: { price: 20, credits: 300 },
+    tier3: { price: 30, credits: 500 },
 };
 
 // --- 辅助函数 ---
@@ -48,6 +48,10 @@ const generateOrderId = () => {
         code += Math.floor(Math.random() * 10);
     }
     return code;
+};
+
+const generateUserId = () => {
+    return `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
 // --- API 路由 ---
@@ -79,7 +83,10 @@ app.post('/api/create-order', async (req, res) => {
         });
     } catch (error) {
         console.error('Error in /api/create-order:', error);
-        res.status(500).json({ message: '服务器在创建订单时发生内部错误。', error: error.message });
+        res.status(500).json({
+            message: '服务器在创建订单时发生内部错误。',
+            error: error.message,
+        });
     }
 });
 
@@ -101,15 +108,16 @@ app.post('/api/user-confirm-payment', async (req, res) => {
             const updatedOrder = { ...orderData, status: 'user_confirmed' }; // 新状态：用户已确认，待管理员审核
             await redis.hset('orders', { [orderId]: updatedOrder });
         }
-        
-        res.json({ success: true, message: 'Payment confirmation received.' });
 
+        res.json({ success: true, message: 'Payment confirmation received.' });
     } catch (error) {
         console.error('Error in /api/user-confirm-payment:', error);
-        res.status(500).json({ message: '服务器在确认用户付款时发生内部错误。', error: error.message });
+        res.status(500).json({
+            message: '服务器在确认用户付款时发生内部错误。',
+            error: error.message,
+        });
     }
 });
-
 
 // API 3: 查询支付状态 (给前端轮询调用)
 app.get('/api/order-status', async (req, res) => {
@@ -123,13 +131,59 @@ app.get('/api/order-status', async (req, res) => {
         if (!orderData) {
             return res.status(404).json({ error: 'Order not found' });
         }
-        
+
         res.json({ status: orderData.status, credits: orderData.credits });
     } catch (error) {
         console.error('Error in /api/order-status:', error);
-        res.status(500).json({ message: '服务器在查询订单状态时发生内部错误。', error: error.message });
+        res.status(500).json({
+            message: '服务器在查询订单状态时发生内部错误。',
+            error: error.message,
+        });
     }
 });
+
+// API for User Data Management
+app.post('/api/update-user', async (req, res) => {
+    try {
+        let { userId, credits } = req.body;
+
+        if (credits === undefined) {
+            return res.status(400).json({ error: 'Credits are required' });
+        }
+
+        let isNewUser = false;
+        if (!userId) {
+            userId = generateUserId();
+            isNewUser = true;
+        }
+
+        const userData = {
+            credits: parseInt(credits, 10),
+            lastUpdated: new Date().toISOString(),
+        };
+
+        await redis.hset('users', { [userId]: userData });
+
+        const responsePayload = {
+            success: true,
+            message: 'User data updated successfully.',
+            userId: userId,
+        };
+
+        if (isNewUser) {
+            responsePayload.message = 'New user created and data saved.';
+        }
+
+        res.json(responsePayload);
+    } catch (error) {
+        console.error('Error in /api/update-user:', error);
+        res.status(500).json({
+            message: '服务器在更新用户数据时发生内部错误。',
+            error: error.message,
+        });
+    }
+});
+
 
 // --- 后台管理 API ---
 
@@ -138,7 +192,9 @@ app.get('/api/pending-orders', async (req, res) => {
     try {
         const { password } = req.query;
         if (password !== ADMIN_PASSWORD) {
-            return res.status(401).json({ message: 'Unauthorized: Invalid password' });
+            return res
+                .status(401)
+                .json({ message: 'Unauthorized: Invalid password' });
         }
 
         const allOrders = await redis.hgetall('orders');
@@ -147,13 +203,21 @@ app.get('/api/pending-orders', async (req, res) => {
         }
 
         const pendingOrders = Object.values(allOrders)
-            .filter(order => order && typeof order === 'object' && order.status === 'user_confirmed')
+            .filter(
+                (order) =>
+                    order &&
+                    typeof order === 'object' &&
+                    order.status === 'user_confirmed',
+            )
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.json(pendingOrders);
     } catch (error) {
         console.error('Error in /api/pending-orders:', error);
-        res.status(500).json({ message: '服务器在获取待处理订单时发生内部错误。', error: error.message });
+        res.status(500).json({
+            message: '服务器在获取待处理订单时发生内部错误。',
+            error: error.message,
+        });
     }
 });
 
@@ -162,7 +226,9 @@ app.post('/api/confirm-order', async (req, res) => {
     try {
         const { orderId, password } = req.body;
         if (password !== ADMIN_PASSWORD) {
-            return res.status(401).json({ message: 'Unauthorized: Invalid password' });
+            return res
+                .status(401)
+                .json({ message: 'Unauthorized: Invalid password' });
         }
         if (!orderId) {
             return res.status(400).json({ message: 'orderId is required' });
@@ -180,12 +246,44 @@ app.post('/api/confirm-order', async (req, res) => {
         const updatedOrder = { ...orderData, status: 'completed' };
         await redis.hset('orders', { [orderId]: updatedOrder });
 
-        res.json({ success: true, message: `Order ${orderId} has been confirmed.` });
+        res.json({
+            success: true,
+            message: `Order ${orderId} has been confirmed.`,
+        });
     } catch (error) {
         console.error('Error in /api/confirm-order:', error);
-        res.status(500).json({ message: '服务器在确认订单时发生内部错误。', error: error.message });
+        res.status(500).json({
+            message: '服务器在确认订单时发生内部错误。',
+            error: error.message,
+        });
     }
 });
+
+// API 6: 获取所有用户数据 (管理员操作)
+app.get('/api/users-data', async (req, res) => {
+    try {
+        const { password } = req.query;
+        if (password !== ADMIN_PASSWORD) {
+            return res
+                .status(401)
+                .json({ message: 'Unauthorized: Invalid password' });
+        }
+
+        const allUsers = await redis.hgetall('users');
+        if (!allUsers) {
+            return res.json({});
+        }
+
+        res.json(allUsers);
+    } catch (error) {
+        console.error('Error in /api/users-data:', error);
+        res.status(500).json({
+            message: '服务器在获取用户数据时发生内部错误。',
+            error: error.message,
+        });
+    }
+});
+
 
 // --- 全局错误处理中间件 ---
 app.use((err, req, res, next) => {
